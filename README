@@ -14,8 +14,8 @@ Description:
   FILL-ME-IN
 
 Requirements:
-  libbot2
+  libbot2 (https://github.com/ripl-ttic/libbot2)
   lcm
-  rrtstar-lcmtypes
+  rrtstar-lcmtypes (https://github.com/ripl-ttic/rrtstar-lcmtypes)
 
 License:      FILL-ME-IN
