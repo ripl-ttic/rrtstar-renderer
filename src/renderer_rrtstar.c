@@ -22,7 +22,6 @@
 
 #include <geom_utils/geometry.h>
 
-#include <lcmtypes/hr_lcmtypes.h>
 #include <lcmtypes/ripl_rrt_command_t.h>
 #include <lcmtypes/ripl_rrt_traj_t.h>
 #include <lcmtypes/ripl_rrt_tree_t.h>
@@ -48,24 +47,24 @@ typedef struct _region_2d_t {
 
 
 typedef struct _RendererRRTStar {
-    BotRenderer renderer;    
+    BotRenderer renderer;
     BotEventHandler ehandler;
-    lcm_t *lcm; 
-    BotViewer *viewer;    
+    lcm_t *lcm;
+    BotViewer *viewer;
     BotGtkParamWidget *pw;
 
-  
+
     int dragging;
     point2d_t drag_start_local;
     point2d_t drag_finish_local;
-    
+
     point2d_t goal_mean;
     double goal_theta;
     double goal_std;
-    
+
     int64_t max_draw_utime;
     gboolean do_heading;
-    
+
     int index_trees;
     int num_trees;
     ripl_rrt_tree_t *trees[MAX_HISTORY];
@@ -111,7 +110,7 @@ typedef struct _RendererRRTStar {
 } RendererRRTStar;
 
 
-void 
+void
 rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer);
 
 
@@ -131,12 +130,12 @@ recompute_particle_distribution(RendererRRTStar *self)
   self->max_draw_utime = bot_timestamp_now() + DRAW_PERSIST_SEC * 1000000;
 }
 
-void 
+void
 on_param_widget_changed (BotGtkParamWidget *pw, const char *name,
                          RendererRRTStar *self) {
 
     self->slider_history_no = bot_gtk_param_widget_get_int (self->pw, SLIDER_HISTORY);
-    
+
     self->render_tree = bot_gtk_param_widget_get_bool (self->pw, CHECKBOX_RENDER_TREE);
     self->render_traj = bot_gtk_param_widget_get_bool (self->pw, CHECKBOX_RENDER_TRAJ);
     self->render_footprint = bot_gtk_param_widget_get_bool (self->pw, CHECKBOX_RENDER_FOOTPRINT);
@@ -151,8 +150,8 @@ on_param_widget_changed (BotGtkParamWidget *pw, const char *name,
 
     self->render_costs =  bot_gtk_param_widget_get_bool (self->pw, CHECKBOX_RENDER_COSTS);
 
-    bot_viewer_request_redraw(self->viewer);    
-    
+    bot_viewer_request_redraw(self->viewer);
+
     return;
 }
 
@@ -164,7 +163,7 @@ on_clear_button(GtkWidget *button, RendererRRTStar *self)
     g_mutex_lock (self->mutex);
 
 
-    for (int i = 0; i < MAX_HISTORY; i++) 
+    for (int i = 0; i < MAX_HISTORY; i++)
         if (self->trees[i]) {
             ripl_rrt_tree_t_destroy (self->trees[i]);
             self->trees[i] = NULL;
@@ -172,11 +171,11 @@ on_clear_button(GtkWidget *button, RendererRRTStar *self)
     self->num_trees = 0;
     self->index_trees = 0;
     self->slider_history_no = 1;
-    
-    bot_gtk_param_widget_set_enabled (self->pw, SLIDER_HISTORY, 0);
-    
 
-    bot_gtk_param_widget_modify_int (self->pw, SLIDER_HISTORY, 
+    bot_gtk_param_widget_set_enabled (self->pw, SLIDER_HISTORY, 0);
+
+
+    bot_gtk_param_widget_modify_int (self->pw, SLIDER_HISTORY,
                                      1, 2,
                                      1, self->slider_history_no);
 
@@ -189,7 +188,7 @@ on_clear_button(GtkWidget *button, RendererRRTStar *self)
 static void
 on_start_button (GtkWidget *button, RendererRRTStar *self)
 {
-    ripl_goal_list_t goal_list; 
+    ripl_goal_list_t goal_list;
 
     goal_list.utime = bot_timestamp_now();
     goal_list.sender_id = 0;
@@ -198,18 +197,18 @@ on_start_button (GtkWidget *button, RendererRRTStar *self)
     goal_list.goals[0].pos[0] = self->goal_mean.x;
     goal_list.goals[0].pos[1] = self->goal_mean.y;
 
-    //Sachi - hack for now until we can get the heading 
+    //Sachi - hack for now until we can get the heading
 
     goal_list.goals[0].theta = self->goal_theta; //M_PI/2;
 
     goal_list.goals[0].do_turn_only = 0;
-    
-    if(self->do_heading){      
-      goal_list.goals[0].heading_tol = 0.3; 
+
+    if(self->do_heading){
+      goal_list.goals[0].heading_tol = 0.3;
       goal_list.goals[0].use_theta = 1;
     }
     else{
-      goal_list.goals[0].heading_tol = 2*M_PI; 
+      goal_list.goals[0].heading_tol = 2*M_PI;
       goal_list.goals[0].use_theta = 0;
     }
     goal_list.goals[0].size[0] = self->goal_std*2;//self->region_goal.size[0];
@@ -217,7 +216,7 @@ on_start_button (GtkWidget *button, RendererRRTStar *self)
 
     ripl_goal_list_t_publish (self->lcm, "RRTSTAR_GOALS", &goal_list);
     free(goal_list.goals);
-    
+
     bot_viewer_request_redraw(self->viewer);
 }
 
@@ -226,14 +225,14 @@ on_start_button (GtkWidget *button, RendererRRTStar *self)
 static void
 on_modify_goal_button (GtkWidget *button, RendererRRTStar *self)
 {
-    
+
     g_mutex_lock (self->mutex);
 
     // Set the key_* variables
     self->key_goal = 1;
 
     bot_viewer_request_pick (self->viewer, &(self->ehandler));
-    
+
     // Enable/Disable the buttons
     gtk_widget_set_sensitive (self->modify_goal_button, FALSE);
 
@@ -259,14 +258,14 @@ on_mp_rrt_tree (const lcm_recv_buf_t *buf, const char *channel,
     self->index_trees++;
     if (self->index_trees >= MAX_HISTORY)
         self->index_trees = 0;
-    
+
     self->num_trees++;
     if (self->num_trees >= MAX_HISTORY)
         self->num_trees = MAX_HISTORY;
 
     bot_gtk_param_widget_set_enabled (self->pw, SLIDER_HISTORY, 1);
 
-    bot_gtk_param_widget_modify_int (self->pw, SLIDER_HISTORY, 
+    bot_gtk_param_widget_modify_int (self->pw, SLIDER_HISTORY,
                                      1, self->num_trees,
                                      1, self->slider_history_no);
 
@@ -282,11 +281,11 @@ on_mp_rrt_traj (const lcm_recv_buf_t *buf, const char *channel,
     RendererRRTStar *self = (RendererRRTStar *)user;
 
     g_mutex_lock (self->mutex);
-    
-    if (self->traj) 
+
+    if (self->traj)
         ripl_rrt_traj_t_destroy (self->traj);
     self->traj = ripl_rrt_traj_t_copy (msg);
-    
+
     g_mutex_unlock (self->mutex);
 
     bot_viewer_request_redraw(self->viewer);
@@ -308,9 +307,9 @@ on_mp_rrt_cmd (const lcm_recv_buf_t *buf, const char *channel,
 static void
 on_bot_pose (const lcm_recv_buf_t *buf, const char *channel,
              const bot_core_pose_t *msg, void *user) {
-    
+
     RendererRRTStar *self = (RendererRRTStar *)user;
-    
+
     g_mutex_lock (self->mutex);
 
     if (self->bot_pose_last)
@@ -329,8 +328,8 @@ rrtstar_renderer_destroy (BotRenderer *renderer) {
 
 
 
-static int 
-mouse_press (BotViewer *viewer, BotEventHandler *ehandler, const double ray_start[3], 
+static int
+mouse_press (BotViewer *viewer, BotEventHandler *ehandler, const double ray_start[3],
              const double ray_dir[3], const GdkEventButton *event)
 {
 
@@ -342,8 +341,8 @@ mouse_press (BotViewer *viewer, BotEventHandler *ehandler, const double ray_star
   if (event->button==1 && self->key_goal==1 && ehandler->picking) {
 
       point2d_t click_pt_local;
-  
-      if (0 != geom_ray_z_plane_intersect_3d(POINT3D(ray_start), 
+
+      if (0 != geom_ray_z_plane_intersect_3d(POINT3D(ray_start),
                                              POINT3D(ray_dir), 0, &click_pt_local)) {
           bot_viewer_request_redraw(self->viewer);
           self->key_goal = 0;
@@ -356,7 +355,7 @@ mouse_press (BotViewer *viewer, BotEventHandler *ehandler, const double ray_star
       self->drag_finish_local = click_pt_local;
 
       recompute_particle_distribution(self);
-      
+
       bot_viewer_request_redraw(self->viewer);
       return 1;
   } else
@@ -365,14 +364,14 @@ mouse_press (BotViewer *viewer, BotEventHandler *ehandler, const double ray_star
 }
 
 static int mouse_release(BotViewer *viewer, BotEventHandler *ehandler,
-                         const double ray_start[3], const double ray_dir[3], 
+                         const double ray_start[3], const double ray_dir[3],
                          const GdkEventButton *event)
 {
 
   RendererRRTStar *self = (RendererRRTStar *)ehandler->user;
 
   if (self->dragging) {
-      self->dragging = 0;    
+      self->dragging = 0;
   }
 
   // If the mouse_release event wasn't meant for us
@@ -392,7 +391,7 @@ static int mouse_release(BotViewer *viewer, BotEventHandler *ehandler,
 
 
 static int mouse_motion (BotViewer *viewer, BotEventHandler *ehandler,
-                         const double ray_start[3], const double ray_dir[3], 
+                         const double ray_start[3], const double ray_dir[3],
                          const GdkEventMotion *event)
 {
   RendererRRTStar *self = (RendererRRTStar*) ehandler->user;
@@ -403,7 +402,7 @@ static int mouse_motion (BotViewer *viewer, BotEventHandler *ehandler,
     return 0;
 
   point2d_t drag_pt_local;
-  if (0 != geom_ray_z_plane_intersect_3d(POINT3D(ray_start), 
+  if (0 != geom_ray_z_plane_intersect_3d(POINT3D(ray_start),
         POINT3D(ray_dir), 0, &drag_pt_local)) {
     return 0;
   }
@@ -417,13 +416,13 @@ static int mouse_motion (BotViewer *viewer, BotEventHandler *ehandler,
 
 
 
-static int key_press (BotViewer *viewer, BotEventHandler *ehandler, 
+static int key_press (BotViewer *viewer, BotEventHandler *ehandler,
                       const GdkEventKey *event)
 {
     RendererRRTStar *self = (RendererRRTStar*) ehandler->user;
 
     if (event->keyval == 'd' || event->keyval == 'D') {
-        if (!self->key_goal) {            
+        if (!self->key_goal) {
             bot_viewer_request_pick(viewer, ehandler);
             self->key_goal = 1;
 
@@ -453,12 +452,12 @@ static int key_press (BotViewer *viewer, BotEventHandler *ehandler,
 
 static void
 draw_footprint (RendererRRTStar * self)
-{ 
+{
     float color_curr[] = {0.5, 0.5, 0.0, 0.0};
     glMaterialfv (GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, color_curr);
 
     glLineWidth(1.0);
-    
+
     glBegin (GL_LINE_LOOP);
     for (int i=0; i<4; i++)
         glVertex2dv (self->footprint + 2*i);
@@ -472,7 +471,7 @@ draw_footprint (RendererRRTStar * self)
         glPushMatrix ();
         glTranslatef (self->footprint[0] - fp_length/2,
                       self->footprint[1] - fp_width/2, 0);
-        bot_gl_draw_arrow_2d (fp_length, fp_width, fp_length * 0.3, 
+        bot_gl_draw_arrow_2d (fp_length, fp_width, fp_length * 0.3,
                               fp_width * 0.5, self->ehandler.hovering);
         glPopMatrix ();
     }
@@ -481,7 +480,7 @@ draw_footprint (RendererRRTStar * self)
 
 void
 rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
-    
+
     RendererRRTStar *self = (RendererRRTStar *)renderer->user;
 
     glEnable (GL_LIGHTING);
@@ -502,9 +501,9 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
     glTranslatef(self->goal_mean.x, self->goal_mean.y, 0);
     bot_gl_draw_circle(self->goal_std);
 
-    glBegin(GL_LINE_STRIP);  
+    glBegin(GL_LINE_STRIP);
     glVertex2f(0.0,0.0);
-    
+
     glVertex2f(self->goal_std*cos(self->goal_theta),self->goal_std*sin(self->goal_theta));
 
     glEnd();
@@ -512,8 +511,8 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
     glTranslatef(-self->goal_mean.x, -self->goal_mean.y, 0);
 
     glLineWidth (5.0);
-    
-    /*    
+
+    /*
     // Draw the goal region
 //     glColor3f (0.1, 1.0, 0.1);
     color_curr[0] = 0.1;
@@ -522,23 +521,23 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
     glMaterialfv (GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, color_curr);
     glLineWidth (5.0);
     glBegin (GL_LINE_LOOP);
-    glVertex3f (self->region_goal.center[0] - self->region_goal.size[0]/2.0, 
+    glVertex3f (self->region_goal.center[0] - self->region_goal.size[0]/2.0,
                 self->region_goal.center[1] - self->region_goal.size[1]/2.0, 0.0);
-    glVertex3f (self->region_goal.center[0] + self->region_goal.size[0]/2.0, 
+    glVertex3f (self->region_goal.center[0] + self->region_goal.size[0]/2.0,
                 self->region_goal.center[1] - self->region_goal.size[1]/2.0, 0.0);
-    glVertex3f (self->region_goal.center[0] + self->region_goal.size[0]/2.0, 
+    glVertex3f (self->region_goal.center[0] + self->region_goal.size[0]/2.0,
                 self->region_goal.center[1] + self->region_goal.size[1]/2.0, 0.0);
-    glVertex3f (self->region_goal.center[0] - self->region_goal.size[0]/2.0, 
+    glVertex3f (self->region_goal.center[0] - self->region_goal.size[0]/2.0,
                 self->region_goal.center[1] + self->region_goal.size[1]/2.0, 0.0);
     glEnd ();
     */
 
     g_mutex_lock (self->mutex);
 
-    
-    
+
+
     /*glPopMatrix();
-    
+
     double t_pos[3] = {.0,.0,.0};
     bot_gl_draw_text(t_pos, GLUT_BITMAP_HELVETICA_12, "Test", BOT_GL_DRAW_TEXT_DROP_SHADOW);
     */
@@ -549,10 +548,10 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
         for (int i=0; i < self->traj->num_states; i++) {
 
             glPushMatrix();
-            
+
             // compute the transformation to world coordinates
             BotTrans body_to_local;
-            double rpy[] = {0,0,self->traj->states[i].t}; 
+            double rpy[] = {0,0,self->traj->states[i].t};
             body_to_local.trans_vec[0] = self->traj->states[i].x;
             body_to_local.trans_vec[1] = self->traj->states[i].y;
             body_to_local.trans_vec[2] = 0;
@@ -569,13 +568,13 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
             draw_footprint (self);
 
             glPopMatrix();
-        }    
+        }
     }
-    
-    
+
+
     if ( (self->render_tree) && (self->num_trees > 0) ) {
-    
-        // Draw all the nodes    
+
+        // Draw all the nodes
         int current_index = (self->index_trees - self->slider_history_no);
         while (current_index < 0)
             current_index += MAX_HISTORY;
@@ -586,13 +585,13 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
         color_curr[1] = 1.0;
         color_curr[2] = 0.3;
         glMaterialfv (GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, color_curr);
-        glBegin (GL_POINTS);    
+        glBegin (GL_POINTS);
         for (int i = 0; i < tree->num_nodes; i++) {
             glVertex3f (tree->nodes[i].state.x, tree->nodes[i].state.y, 0.0);
         }
         glEnd ();
-    
-    
+
+
         // Draw the edges
         //         glColor3f (1.0,0.3,0.3);
         for (int i = 0; i < tree->num_edges; i++) {
@@ -602,32 +601,32 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
             color_curr[2] = 0.3;
             glMaterialfv (GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, color_curr);
             glBegin (GL_LINE_STRIP);
-            glVertex3f (tree->nodes[tree->edges[i][1]].state.x, 
+            glVertex3f (tree->nodes[tree->edges[i][1]].state.x,
                         tree->nodes[tree->edges[i][1]].state.y,
                         0.0);
             for (int j = 0; j < tree->traj_from_parent[tree->edges[i][0]].num_states; j++) {
-                glVertex3f (tree->traj_from_parent[tree->edges[i][0]].states[j].x, 
+                glVertex3f (tree->traj_from_parent[tree->edges[i][0]].states[j].x,
                             tree->traj_from_parent[tree->edges[i][0]].states[j].y,
                             0.0);
             }
-            glVertex3f (tree->nodes[tree->edges[i][0]].state.x, 
+            glVertex3f (tree->nodes[tree->edges[i][0]].state.x,
                         tree->nodes[tree->edges[i][0]].state.y,
                         0.0);
             glEnd();
 
         /*if (1) {
           char buf[128];
-          double cost = 100; 
+          double cost = 100;
           sprintf(buf, "%5.1f", tree->nodes[tree->edges[i][0]].distance_from_root);
-          double pos[3] = { tree->nodes[tree->edges[i][0]].state.x, 
+          double pos[3] = { tree->nodes[tree->edges[i][0]].state.x,
                 tree->nodes[tree->edges[i][0]].state.y, 0 };
           glColor3f(0.0,1.0,0);
           //                glutil_draw_text(pos, NULL, buf, GLUTIL_DRAW_TEXT_DROP_SHADOW);
           bot_gl_draw_text(pos, NULL, buf, 0);
         }*/
         }
-        
-        int *edge_counts = (int *) calloc(tree->num_nodes,sizeof(int)); 
+
+        int *edge_counts = (int *) calloc(tree->num_nodes,sizeof(int));
 
         for (int i = 0; i < tree->num_edges; i++) {
             glLineWidth (0.3);
@@ -639,32 +638,32 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
 
             edge_counts[tree->edges[i][0]]++;
             edge_counts[tree->edges[i][1]]++;
-            
-            glVertex3f (tree->nodes[tree->edges[i][1]].state.x, 
+
+            glVertex3f (tree->nodes[tree->edges[i][1]].state.x,
                         tree->nodes[tree->edges[i][1]].state.y,
                         0.0);
 
             for (int j = 0; j < tree->traj_from_parent[tree->edges[i][0]].num_states; j++) {
-                glVertex3f (tree->traj_from_parent[tree->edges[i][0]].states[j].x, 
+                glVertex3f (tree->traj_from_parent[tree->edges[i][0]].states[j].x,
                             tree->traj_from_parent[tree->edges[i][0]].states[j].y,
                             0.0);
-                
+
             }
-            glVertex3f (tree->nodes[tree->edges[i][0]].state.x, 
+            glVertex3f (tree->nodes[tree->edges[i][0]].state.x,
                         tree->nodes[tree->edges[i][0]].state.y,
                         0.0);
-            
+
             glEnd();
         }
-        
+
         // Render the cost
         if (self->render_costs) {
             for(int i=0; i < tree->num_nodes; i++){
                 if (edge_counts[i] ==1) {
                     char buf[128];
-                    double cost = 100; 
+                    double cost = 100;
                     sprintf(buf, "%5.1f", tree->nodes[i].distance_from_root);
-                    double pos[3] = { tree->nodes[i].state.x, 
+                    double pos[3] = { tree->nodes[i].state.x,
                                       tree->nodes[i].state.y, 0 };
                     color_curr[0] = 0.0;
                     color_curr[1] = 1.0;
@@ -675,10 +674,10 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
                 }
             }
         }
-        
+
         free (edge_counts);
     }
-    
+
 
     // Now render the best trajectory
     if ( (self->render_traj) && (self->traj) ) {
@@ -697,7 +696,7 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
     }
 
 
-    
+
     glDisable (GL_STENCIL_TEST);
     glDisable (GL_LIGHTING);
     //glDisable (GL_DEPTH_TEST);
@@ -705,27 +704,27 @@ rrtstar_renderer_draw (BotViewer *viewer, BotRenderer *renderer) {
     glEnable (GL_DEPTH_TEST);
 
     glFlush ();
-    
+
     g_mutex_unlock (self->mutex);
 
 }
 
 
-void 
+void
 setup_renderer_rrtstar (BotViewer *viewer, int priority, lcm_t *_lcm) {
 
     RendererRRTStar *self = (RendererRRTStar *) malloc (sizeof (RendererRRTStar));
-    
+
     self->num_trees = 0;
-    
+
     self->index_trees = 0;
     for (int i = 0; i < MAX_HISTORY; i++)
         self->trees[i] = NULL;
 
     self->traj = NULL;
-    
+
     self->mutex = g_mutex_new ();
-    
+
     self->mouseNodeXY[0] = 0.0;
     self->mouseNodeXY[1] = 0.0;
 
@@ -751,10 +750,10 @@ setup_renderer_rrtstar (BotViewer *viewer, int priority, lcm_t *_lcm) {
     ehandler->key_press = key_press;
     ehandler->user = self;
 
-    self->lcm = _lcm; 
+    self->lcm = _lcm;
     self->viewer = viewer;
     self->pw = BOT_GTK_PARAM_WIDGET (bot_gtk_param_widget_new());
-    
+
     self->key_goal = 0;
     self->region_goal.center[0] = 8.0;
     self->region_goal.center[1] = 8.0;
@@ -769,11 +768,11 @@ setup_renderer_rrtstar (BotViewer *viewer, int priority, lcm_t *_lcm) {
 
     // Add the history slider
     gtk_box_pack_start (GTK_BOX(renderer->widget), GTK_WIDGET(self->pw), TRUE, TRUE, 0);
-    bot_gtk_param_widget_add_int (self->pw, SLIDER_HISTORY, 
+    bot_gtk_param_widget_add_int (self->pw, SLIDER_HISTORY,
                                   BOT_GTK_PARAM_WIDGET_SLIDER, 1, MAX_HISTORY, 1, 1);
     bot_gtk_param_widget_set_enabled (self->pw, SLIDER_HISTORY, 0);
     self->slider_history_no = 1;
-    
+
     // Add render traj check box
     bot_gtk_param_widget_add_booleans (self->pw, BOT_GTK_PARAM_WIDGET_CHECKBOX,
                                        CHECKBOX_RENDER_TRAJ, 0, NULL);
@@ -790,7 +789,7 @@ setup_renderer_rrtstar (BotViewer *viewer, int priority, lcm_t *_lcm) {
     self->render_costs = FALSE;
 
 
-    
+
     // Add render footprint check box
     bot_gtk_param_widget_add_booleans (self->pw, BOT_GTK_PARAM_WIDGET_CHECKBOX,
                                        CHECKBOX_RENDER_FOOTPRINT, 1, NULL);
@@ -799,7 +798,7 @@ setup_renderer_rrtstar (BotViewer *viewer, int priority, lcm_t *_lcm) {
     bot_gtk_param_widget_add_booleans (self->pw, BOT_GTK_PARAM_WIDGET_CHECKBOX,
                                        CHECKBOX_DO_HEADING, 1, NULL);
 
-    self->render_footprint = TRUE;    
+    self->render_footprint = TRUE;
     self->do_heading = TRUE;
 
     // Add the clear history button
@@ -808,7 +807,7 @@ setup_renderer_rrtstar (BotViewer *viewer, int priority, lcm_t *_lcm) {
                        FALSE, FALSE, 0);
     g_signal_connect(G_OBJECT(clear_button), "clicked",
                      G_CALLBACK(on_clear_button), self);
-    
+
     // Add the start  button
     GtkWidget *start_button = gtk_button_new_with_label ("Start RRT");
     gtk_box_pack_start(GTK_BOX(renderer->widget), start_button,
@@ -827,7 +826,7 @@ setup_renderer_rrtstar (BotViewer *viewer, int priority, lcm_t *_lcm) {
     // Show the widgets
     gtk_widget_show_all (renderer->widget);
     g_signal_connect (G_OBJECT (self->pw), "changed", G_CALLBACK (on_param_widget_changed), self);
-    
+
     // Subscribe to MP_RRT_TREE and MP_RRT_TRAJ message
     ripl_rrt_tree_t_subscribe (self->lcm, "RRTSTAR_TREE", on_mp_rrt_tree, self);
     ripl_rrt_traj_t_subscribe (self->lcm, "RRTSTAR_TRAJECTORY", on_mp_rrt_traj, self);
@@ -835,7 +834,7 @@ setup_renderer_rrtstar (BotViewer *viewer, int priority, lcm_t *_lcm) {
 
     // Subscribe to the POSE message
     bot_core_pose_t_subscribe (self->lcm, "POSE", on_bot_pose, self);
-    
+
     bot_viewer_add_renderer (viewer, renderer, priority);
     bot_viewer_add_event_handler(viewer, ehandler, priority);
 
