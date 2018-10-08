@@ -25,6 +25,8 @@
 #include <lcmtypes/ripl_rrt_command_t.h>
 #include <lcmtypes/ripl_rrt_traj_t.h>
 #include <lcmtypes/ripl_rrt_tree_t.h>
+#include <lcmtypes/ripl_goal_t.h>
+#include <lcmtypes/ripl_goal_list_t.h>
 #include <lcmtypes/bot_core_pose_t.h>
 
 #define RENDERER_NAME "RRT_STAR"
